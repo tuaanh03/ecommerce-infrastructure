@@ -7,7 +7,7 @@ metadata:
   labels:
     app: ecommerce-backend
 spec:
-  replicas: 4
+  replicas: 3
   revisionHistoryLimit: 11
   selector:
     matchLabels:
@@ -56,7 +56,7 @@ metadata:
   labels:
     app: ecommerce-frontend
 spec:
-  replicas: 2
+  replicas: 3
   revisionHistoryLimit: 11
   selector:
     matchLabels:
