@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/tuaanh03/ecommerce-infrastructure.git
     targetRevision: main
-    path: ecommerce
+    path: apps/ecommerce
 
   destination:
     server: https://kubernetes.default.svc
