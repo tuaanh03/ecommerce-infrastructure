@@ -1,0 +1,293 @@
+#Deployment backend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-backend-deployment
+  namespace: ecommerce
+  labels:
+    app: ecommerce-backend
+spec:
+  replicas: 2
+  revisionHistoryLimit: 11
+  selector:
+    matchLabels:
+      app: ecommerce-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  template:
+    metadata:
+      labels:
+        app: ecommerce-backend
+    spec:
+      containers:
+        - name: ecommerce-backend
+          image: mukuzro/ecommerce-backend:v20260429-3
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: tcp
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: application-config-map-volume
+              mountPath: /app/config/application.properties
+              subPath: application.properties
+      volumes:
+        - name: application-config-map-volume
+          configMap:
+            name: ecommerce-backend-application-properties-configmap
+            defaultMode: 420
+---
+#Deployment frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-frontend-deployment
+  namespace: ecommerce
+  labels:
+    app: ecommerce-frontend
+spec:
+  replicas: 2
+  revisionHistoryLimit: 11
+  selector:
+    matchLabels:
+      app: ecommerce-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  template:
+    metadata:
+      labels:
+        app: ecommerce-frontend
+    spec:
+      containers:
+        - name: ecommerce-frontend
+          image: mukuzro/ecommerce-frontend:v20260428-1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: tcp
+              protocol: TCP
+---
+#Service backend
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-backend-service
+  namespace: ecommerce
+spec:
+  type: ClusterIP
+  selector:
+    app: ecommerce-backend
+  ports:
+    - name: tcp
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+---
+#Service frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-frontend-service
+  namespace: ecommerce
+spec:
+  type: ClusterIP
+  selector:
+    app: ecommerce-frontend
+  ports:
+    - name: tcp
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
+#Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ecommerce-frontend-ingress
+  namespace: ecommerce
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ecommerce.app-store.codes
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ecommerce-frontend-service
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - ecommerce.app-store.codes
+      secretName: ecommerce-tls
+---
+#StatefulSet database
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb
+  namespace: ecommerce
+spec:
+  serviceName: mariadb-service
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: mariadb
+
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      securityContext:
+        fsGroup: 65534
+
+      containers:
+        - name: mariadb
+          image: mariadb:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3306
+              name: mysql
+
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: devopseduvn   # ⚠️ sẽ fix bên dưới
+
+          volumeMounts:
+            - name: mariadb-storage
+              mountPath: /var/lib/mysql
+
+      volumes:
+        - name: mariadb-storage
+          persistentVolumeClaim:
+            claimName: nfs-pvc
+
+  updateStrategy:
+    type: RollingUpdate
+---
+#Service database
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-service
+  namespace: ecommerce
+spec:
+  type: NodePort
+  selector:
+    app: mariadb
+  ports:
+    - port: 3306
+      targetPort: 3306
+      protocol: TCP
+      nodePort: 31306
+---
+#PersistentVolumeClaim database
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+  namespace: ecommerce
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage
+  resources:
+    requests:
+      storage: 5Gi
+  volumeMode: Filesystem
+  volumeName: nfs-pv
+---
+#PersistentVolume database
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-storage
+  volumeMode: Filesystem
+  nfs:
+    server: 10.146.0.6
+    path: /data-db
+---
+#StorageClass database
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-storage
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+#ConfigMap application.properties
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ecommerce-backend-application-properties-configmap
+  namespace: ecommerce
+data:
+  application.properties: |
+    spring.datasource.url=jdbc:mysql://mariadb-service:3306/full-stack-ecommerce
+    spring.datasource.username=root
+    spring.datasource.password=devopseduvn
+    spring.datasource.driverClassName=com.mysql.cj.jdbc.Driver
+    spring.datasource.sql-script-encoding=UTF-8
+
+    spring.jpa.properties.hibernate.globally_quoted_identifiers=true
+    spring.jpa.hibernate.ddl-auto=none
+    spring.jpa.show-sql=true
+    spring.jpa.properties.hibernate.format_sql=true
+    spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQL8Dialect
+
+    spring.data.rest.base-path=/api
+    allowed.origins=https://ecommerce.app-store.codes/
+    spring.data.rest.detection-strategy=ANNOTATED
+
+    okta.oauth2.client-id=0oab0lzwjoN1Rjsar5d7
+    okta.oauth2.issuer=https://dev-82108115.okta.com/oauth2/default
+---
+#HorizontalPodAutoscaler backend
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ecommerce-backend-scaling
+  namespace: ecommerce
+spec:
+  minReplicas: 2
+  maxReplicas: 4
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ecommerce-backend-deployment
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
