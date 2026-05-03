@@ -73,7 +73,7 @@ spec:
     spec:
       containers:
         - name: ecommerce-frontend
-          image: mukuzro/ecommerce-frontend:v20260428-1
+          image: mukuzro/ecommerce-frontend:v20260503-2
           imagePullPolicy: Always
           ports:
             - containerPort: 80
