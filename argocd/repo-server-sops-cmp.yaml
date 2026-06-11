@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sops-kustomize-plugin
+  namespace: argocd
+data:
+  plugin.yaml: |
+    apiVersion: argoproj.io/v1alpha1
+    kind: ConfigManagementPlugin
+    metadata:
+      name: sops-kustomize
+    spec:
+      discover:
+        find:
+          command:
+            - sh
+            - -c
+            - |
+              test -f kustomization.yaml && find . -name "*.sops.yaml" | grep -q .
+      generate:
+        command:
+          - sh
+          - -c
+        args:
+          - |
+            set -eu
+
+            find . -type f \( -name "*.sops.yaml" -o -name "*.sops.yml" \) -print | while read -r f; do
+              case "$f" in
+                *.sops.yaml)
+                  out="${f%.sops.yaml}.yaml"
+                  ;;
+                *.sops.yml)
+                  out="${f%.sops.yml}.yml"
+                  ;;
+              esac
+
+              echo "Decrypting $f -> $out" >&2
+              sops -d "$f" > "$out"
+            done
+
+            kustomize build .

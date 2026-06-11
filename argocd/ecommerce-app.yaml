@@ -10,6 +10,8 @@ spec:
     repoURL: https://github.com/tuaanh03/ecommerce-infrastructure.git
     targetRevision: main
     path: apps/ecommerce
+    plugin:
+      name: sops-kustomize
 
   destination:
     server: https://kubernetes.default.svc

@@ -1,0 +1,5 @@
+creation_rules:
+  - path_regex: '.*\.sops\.ya?ml$'
+    encrypted_regex: '^(data|stringData)$'
+    gcp_kms:
+      - projects/project-e42a7d8e-d909-49f2-944/locations/asia-northeast1/keyRings/sops-secret/cryptoKeys/sops-key-secret
